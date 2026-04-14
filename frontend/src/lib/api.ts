@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ApiResponse, HomepageData, VideoItem, Subtitle } from '@/types';
 
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
+const API_BASE_URL = 'https://backend-production-ec2e.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

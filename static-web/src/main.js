@@ -1,6 +1,6 @@
 import './style.css'
 
-const API_BASE = 'http://localhost:5000/api'
+const API_BASE = 'https://backend-production-ec2e.up.railway.app/api'
 const videoGrid = document.getElementById('video-grid')
 const searchInput = document.getElementById('search-input')
 const modal = document.getElementById('player-modal')
