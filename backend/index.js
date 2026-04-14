@@ -59,12 +59,10 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 const MIRROR_HOSTS = [
-    "h5.aoneroom.com",
     "moviebox.pk",
     "moviebox.ph",
     "movieboxapp.in",
-    "moviebox.cc",
-    "moviebox.tv"
+    "h5.aoneroom.com"
 ];
 
 let currentHostIndex = 0;
