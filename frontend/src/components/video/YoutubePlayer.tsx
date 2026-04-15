@@ -315,6 +315,7 @@ export function YoutubePlayer(props: {
         className="w-full h-full outline-none"
         poster={props.poster}
         autoPlay={props.autoPlay}
+        crossOrigin="anonymous"
         onClick={(e) => {
           e.stopPropagation();
           togglePlay();

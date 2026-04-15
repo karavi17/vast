@@ -1246,8 +1246,20 @@ app.get('/api/stream', async (req, res) => {
                 url: streamUrl,
                 responseType: 'stream',
                 timeout: 0, // No timeout for streams
-                headers
+                headers,
+                validateStatus: (status) => status < 500 // Allow 4xx errors
             });
+
+            if (response.status >= 400) {
+                if (!res.headersSent) {
+                    return res.status(response.status).json({
+                        status: 'error',
+                        message: `Upstream server returned ${response.status}`,
+                        url: streamUrl
+                    });
+                }
+                return;
+            }
             
             res.status(206).set({
                 'Content-Type': contentType,
@@ -1255,7 +1267,8 @@ app.get('/api/stream', async (req, res) => {
                 'Content-Range': `bytes ${start}-${end}/${fileSize}`,
                 'Accept-Ranges': 'bytes',
                 'Cache-Control': 'no-cache',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': '*',
+                'X-Content-Type-Options': 'nosniff'
             });
             
             response.data.pipe(res);
@@ -1269,15 +1282,28 @@ app.get('/api/stream', async (req, res) => {
                 url: streamUrl,
                 responseType: 'stream',
                 timeout: 0,
-                headers
+                headers,
+                validateStatus: (status) => status < 500 // Allow 4xx errors
             });
+
+            if (response.status >= 400) {
+                if (!res.headersSent) {
+                    return res.status(response.status).json({
+                        status: 'error',
+                        message: `Upstream server returned ${response.status}`,
+                        url: streamUrl
+                    });
+                }
+                return;
+            }
             
             res.status(200).set({
                 'Content-Type': contentType,
                 'Content-Length': fileSize,
                 'Accept-Ranges': 'bytes',
                 'Cache-Control': 'no-cache',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': '*',
+                'X-Content-Type-Options': 'nosniff'
             });
             
             response.data.pipe(res);
@@ -1427,6 +1453,7 @@ app.use('*', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Backend server running on http://localhost:${PORT}`);
 });
 
 module.exports = app;
