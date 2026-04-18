@@ -1,7 +1,6 @@
 import axios from 'axios';
-import { ApiResponse, HomepageData, VideoItem, Subtitle } from '@/types';
+import type { ApiResponse, HomepageData, VideoItem, Subtitle } from '@/types';
 
-// Use a relative URL for better portability with Next.js rewrites
 const API_BASE_URL = '/api';
 
 const api = axios.create({

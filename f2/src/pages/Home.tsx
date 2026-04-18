@@ -1,8 +1,6 @@
-'use client';
-
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { getHomepage, getTrending } from '@/lib/api';
-import { VideoItem, VideoSection } from '@/types';
+import type { VideoItem, VideoSection } from '@/types';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { Loader2 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
@@ -26,7 +24,7 @@ export default function Home() {
       if (entries[0].isIntersecting && hasMore) {
         setPage(prevPage => prevPage + 1);
       }
-    });
+    }, { rootMargin: '400px' });
     
     if (node) observer.current.observe(node);
   }, [loading, loadingMore, hasMore]);
@@ -39,28 +37,26 @@ export default function Home() {
         setError(null);
         setPage(0);
         
-        // Fire both initial requests in parallel
         const [homeResponse, trendingResponse] = await Promise.allSettled([
           getHomepage(language),
           getTrending(0, 24, language)
         ]);
         
-        // Process homepage
         if (homeResponse.status === 'fulfilled' && homeResponse.value.status === 'success' && homeResponse.value.data.sections) {
           setSections(homeResponse.value.data.sections);
         } else {
           setSections([]);
         }
 
-        // Process trending
         if (trendingResponse.status === 'fulfilled' && trendingResponse.value.status === 'success' && trendingResponse.value.data.items) {
           setTrending(trendingResponse.value.data.items);
-          setHasMore(trendingResponse.value.data.items.length >= 12);
+          setHasMore(trendingResponse.value.data.items.length >= 20);
         } else {
           setTrending([]);
           setHasMore(false);
         }
-      } catch {
+      } catch (err) {
+        console.error(err);
         setError('Unable to load content. Please make sure the backend server is running.');
       } finally {
         setLoading(false);
@@ -70,7 +66,6 @@ export default function Home() {
     fetchData();
   }, [language]);
 
-  // Load more trending when page changes
   useEffect(() => {
     if (page === 0) return;
 
@@ -88,10 +83,11 @@ export default function Home() {
               const uniqueNewItems = newItems.filter(v => !existingIds.has(v.subjectId));
               return [...prev, ...uniqueNewItems];
             });
-            setHasMore(newItems.length >= 12);
+            setHasMore(newItems.length >= 20);
           }
         }
-      } catch {
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoadingMore(false);
       }
@@ -104,63 +100,37 @@ export default function Home() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
         <Loader2 className="w-10 h-10 animate-spin text-red-600 mb-4" />
-        <p className="text-lg font-medium">Fetching the latest content...</p>
+        <p className="text-lg font-medium">Loading content...</p>
       </div>
     );
   }
 
-  if (error && sections.length === 0 && trending.length === 0) {
+  if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-white px-4">
-        <div className="bg-[#1a1a1a] p-8 rounded-2xl border border-[#333] max-w-md text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Connection Error</h2>
-          <p className="text-[#aaaaaa] mb-6">{error}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="bg-white text-black font-bold py-2 px-6 rounded-full hover:bg-gray-200 transition-colors"
-          >
-            Retry Connection
-          </button>
-        </div>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-white px-4 text-center">
+        <p className="text-lg text-red-500 mb-2">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-w-0">
-      {/* Filters/Tags Bar */}
-      <div className="sticky top-[56px] bg-[#0f0f0f] pt-1 pb-3 z-30 flex gap-2 sm:gap-3 overflow-x-auto no-scrollbar -mx-2 px-2 sm:mx-0 sm:px-0 border-b border-[#272727] sm:border-none">
-        {['All', 'Movies', 'TV Series', 'Trending', 'Recently Added', 'Popular', 'New Releases', 'Hindi', 'English'].map((tag) => (
-          <button
-            key={tag}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-              tag === 'All' ? 'bg-white text-black' : 'bg-[#272727] text-white hover:bg-[#3f3f3f]'
-            }`}
-          >
-            {tag}
-          </button>
-        ))}
-      </div>
-
-      {/* Render sections from homepage API if available */}
+    <div className="space-y-4">
       {sections.map((section, idx) => (
-        <VideoGrid key={idx} title={section.title} videos={section.items} />
+        <VideoGrid key={`${section.title}-${idx}`} title={section.title} videos={section.title === 'Recommendation' ? section.items.slice(0, 10) : section.items} />
       ))}
-
-      {/* Render Trending as its own section or if sections are empty */}
-      {(trending.length > 0 && sections.length === 0) && (
-        <VideoGrid title="Trending Now" videos={trending} />
-      )}
       
-      {trending.length > 0 && sections.length > 0 && (
-        <VideoGrid title="Recommended for You" videos={trending} />
-      )}
-
-      {/* Sentinel for infinite scroll */}
-      <div ref={lastElementRef} className="h-10 flex items-center justify-center mt-4">
+      <VideoGrid title="Trending Now" videos={trending} />
+      
+      <div ref={lastElementRef} className="h-20 flex items-center justify-center">
         {loadingMore && <Loader2 className="w-8 h-8 animate-spin text-red-600" />}
         {!hasMore && trending.length > 0 && (
-          <p className="text-[#aaaaaa] text-sm italic">No more recommendations to show.</p>
+          <p className="text-[#aaaaaa] text-sm italic">You've reached the end of the list.</p>
         )}
       </div>
     </div>

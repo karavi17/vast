@@ -1,7 +1,5 @@
-'use client';
-
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { usePathname } from 'next/navigation';
+import { useLocation } from 'react-router-dom';
 
 interface UIContextType {
   isSidebarOpen: boolean;
@@ -12,10 +10,10 @@ interface UIContextType {
 const UIContext = createContext<UIContextType | undefined>(undefined);
 
 export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const pathname = usePathname();
+  const location = useLocation();
 
   const [isSidebarOpen, setSidebarOpen] = useState(() => {
-    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+    if (window.innerWidth >= 768) {
       return true;
     }
     return false;
@@ -27,6 +25,8 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     const handleResize = () => {
       if (window.innerWidth >= 768) {
         setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
       }
     };
 
@@ -35,8 +35,10 @@ export const UIProvider: React.FC<{ children: React.ReactNode }> = ({ children }
   }, []);
 
   useEffect(() => {
-    setSidebarOpen(false);
-  }, [pathname]);
+    if (window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  }, [location]);
 
   return (
     <UIContext.Provider value={{ isSidebarOpen, setSidebarOpen, toggleSidebar }}>

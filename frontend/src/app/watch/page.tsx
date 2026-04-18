@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getVideoInfo, getVideoSources, getRelatedVideos } from '@/lib/api';
-import { VideoItem, Subtitle } from '@/types';
+import { VideoItem, Subtitle, SourcesResponseData } from '@/types';
 import { Loader2, Share2, Download, MoreVertical, ChevronDown, List as ListIcon } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { YoutubePlayer } from '@/components/video/YoutubePlayer';
@@ -21,6 +21,16 @@ interface Source {
   format: string;
 }
 
+function formatTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
+  const seconds = Math.floor(totalSeconds % 60);
+  const minutes = Math.floor((totalSeconds / 60) % 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const mm = hours > 0 ? String(minutes).padStart(2, '0') : String(minutes);
+  const ss = String(seconds).padStart(2, '0');
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
 function WatchVideo() {
   const searchParams = useSearchParams();
   const videoId = searchParams.get('v');
@@ -33,6 +43,7 @@ function WatchVideo() {
   const [relatedVideos, setRelatedVideos] = useState<VideoItem[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [loadingSources, setLoadingSources] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedSeason, setSelectedSeason] = useState<number>(0);
   const [selectedEpisode, setSelectedEpisode] = useState<number>(0);
@@ -76,47 +87,50 @@ function WatchVideo() {
       if (!videoId && !downloadId) return;
 
       try {
-        setLoading(true);
-        setError(null);
+        const isInitialLoad = !videoInfo || videoInfo.subjectId !== videoId;
         
         if (downloadId) {
-          // ... (offline logic remains the same)
-          const meta = await getOfflineDownloadMeta(downloadId);
-          if (!meta) {
-            setError('Downloaded video not found.');
+          // Only process offline if it's the first load or downloadId changed
+          if (isInitialLoad) {
+            setLoading(true);
+            setError(null);
+            const meta = await getOfflineDownloadMeta(downloadId);
+            if (!meta) {
+              setError('Downloaded video not found.');
+              setLoading(false);
+              return;
+            }
+            const blob = await getOfflineDownloadBlobUrl(downloadId);
+            if (!blob) {
+              setError('Failed to open downloaded video.');
+              setLoading(false);
+              return;
+            }
+            if (offlineRevokeRef.current) offlineRevokeRef.current();
+            offlineRevokeRef.current = blob.revoke;
+            setVideoInfo({
+              subjectId: meta.videoId,
+              subjectType: Number(type || 1),
+              title: meta.title,
+              thumbnail: meta.thumbnail,
+              languages: meta.language ? [meta.language] : undefined,
+              quality: meta.quality,
+            });
+            setSources([
+              {
+                id: meta.id,
+                quality: meta.quality || 'Offline',
+                language: meta.language || 'Offline',
+                directUrl: blob.url,
+                downloadUrl: '',
+                streamUrl: blob.url,
+                format: meta.mimeType || 'video/mp4',
+              },
+            ]);
+            setSelectedSourceId(meta.id);
+            setIsDownloaded(true);
             setLoading(false);
-            return;
           }
-          const blob = await getOfflineDownloadBlobUrl(downloadId);
-          if (!blob) {
-            setError('Failed to open downloaded video.');
-            setLoading(false);
-            return;
-          }
-          if (offlineRevokeRef.current) offlineRevokeRef.current();
-          offlineRevokeRef.current = blob.revoke;
-          setVideoInfo({
-            subjectId: meta.videoId,
-            subjectType: Number(type || 1),
-            title: meta.title,
-            thumbnail: meta.thumbnail,
-            languages: meta.language ? [meta.language] : undefined,
-            quality: meta.quality,
-          });
-          setSources([
-            {
-              id: meta.id,
-              quality: meta.quality || 'Offline',
-              language: meta.language || 'Offline',
-              directUrl: blob.url,
-              downloadUrl: '',
-              streamUrl: blob.url,
-              format: meta.mimeType || 'video/mp4',
-            },
-          ]);
-          setSelectedSourceId(meta.id);
-          setIsDownloaded(true);
-          setLoading(false);
           return;
         }
 
@@ -127,45 +141,59 @@ function WatchVideo() {
         }
         const vId = videoId;
 
-        // Fire all independent requests in parallel to drastically improve load times
-        const fetchInfo = (!videoInfo || videoInfo.subjectId !== vId) 
-          ? getVideoInfo(vId) 
-          : Promise.resolve({ status: 'success', data: { subject: videoInfo } });
-          
-        const fetchRelated = getRelatedVideos(vId, language);
-        const fetchSources = getVideoSources(vId, selectedSeason, selectedEpisode);
+        // Fetch sources and related videos on every change
+        // Fetch info only on initial load
+        if (isInitialLoad) {
+          setLoading(true);
+          setError(null);
+        } else {
+          setLoadingSources(true);
+        }
 
-        const [infoResponse, relatedResponse, sourcesResponse] = await Promise.all([fetchInfo, fetchRelated, fetchSources]);
+        const requests: Promise<any>[] = [
+          getVideoSources(vId, selectedSeason, selectedEpisode),
+          getRelatedVideos(vId, language)
+        ];
+        
+        if (isInitialLoad) {
+          requests.unshift(getVideoInfo(vId));
+        }
 
-        // Process Info Response
-        if (infoResponse.status === 'success' && infoResponse.data.subject) {
-          const currentSubject = infoResponse.data.subject;
-          if (!videoInfo || videoInfo.subjectId !== vId) {
+        const results = await Promise.allSettled(requests);
+        
+        let infoResult, sourcesResult, relatedResult;
+        if (isInitialLoad) {
+          [infoResult, sourcesResult, relatedResult] = results;
+        } else {
+          [sourcesResult, relatedResult] = results;
+        }
+
+        // Process Info
+        if (isInitialLoad) {
+          if (infoResult.status === 'fulfilled' && infoResult.value.status === 'success' && infoResult.value.data.subject) {
+            const currentSubject = infoResult.value.data.subject;
             setVideoInfo(currentSubject);
-            // Set initial season/episode if series and not already set
-            if (currentSubject.subjectType === 2 && currentSubject.episodeList && currentSubject.episodeList.length > 0) {
-              // Only set if we haven't selected one yet
+            if (currentSubject.subjectType === 2 && currentSubject.episodeList?.length > 0) {
               if (selectedSeason === 0 || selectedEpisode === 0) {
                 const firstEp = currentSubject.episodeList[0];
                 setSelectedSeason(firstEp.season);
                 setSelectedEpisode(firstEp.episode);
               }
             }
+          } else {
+            setError('Failed to load video info.');
+            setLoading(false);
+            setLoadingSources(false);
+            return;
           }
         }
 
-        // Process Related Response
-        if (relatedResponse.status === 'success' && relatedResponse.data.items) {
-          setRelatedVideos(relatedResponse.data.items);
-        }
-
-        // Process Sources Response
-        const sourcesData = sourcesResponse.data as { processedSources?: unknown; processedSubtitles?: Subtitle[] } | null;
-        if (sourcesResponse.status === 'success' && sourcesData) {
+        // Process Sources
+        if (sourcesResult.status === 'fulfilled' && sourcesResult.value.status === 'success') {
+          const sourcesData = sourcesResult.value.data as SourcesResponseData;
           if (sourcesData.processedSources) {
-            const availableSources = sourcesData.processedSources as Source[];
+            const availableSources = sourcesData.processedSources;
             setSources(availableSources);
-
             if (availableSources.length > 0) {
               let preferredSource = availableSources[0];
               if (language === 'HINDI') {
@@ -176,17 +204,25 @@ function WatchVideo() {
               setSelectedSourceId(preferredSource.id);
             }
           }
-          
           if (sourcesData.processedSubtitles) {
             setSubtitles(sourcesData.processedSubtitles);
-          } else {
-            setSubtitles([]);
           }
         }
-      } catch (err) {
-        setError('Failed to load video. Please try again later.');
-      } finally {
+
+        // Process Related
+        if (relatedResult.status === 'fulfilled' && relatedResult.value.status === 'success') {
+          setRelatedVideos(relatedResult.value.data.items);
+        } else {
+          setRelatedVideos([]);
+        }
+
         setLoading(false);
+        setLoadingSources(false);
+
+      } catch {
+        setError('Failed to load video. Please try again later.');
+        setLoading(false);
+        setLoadingSources(false);
       }
     };
 
@@ -275,7 +311,7 @@ function WatchVideo() {
 
       setIsDownloaded(true);
       setDownloadProgress(null);
-    } catch (e) {
+    } catch {
       setError('Download failed. This source may block downloads in browser.');
       setDownloadProgress(null);
     } finally {
@@ -317,7 +353,13 @@ function WatchVideo() {
         
         {/* Video Player */}
         <div className="aspect-video w-full bg-black rounded-xl overflow-hidden mb-4 border border-[#303030] shadow-2xl relative">
-          {playerSources.length > 0 ? (
+          {loadingSources && sources.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-[#aaaaaa] bg-[#000000]">
+              <div className="w-12 h-12 border-4 border-red-600/30 border-t-red-600 rounded-full animate-spin mb-4" />
+              <p className="text-lg font-medium text-white">Fetching high-quality links...</p>
+              <p className="text-sm mt-2 opacity-60">This usually takes a few seconds</p>
+            </div>
+          ) : sources.length > 0 ? (
             <YoutubePlayer
               poster={videoInfo.thumbnail || videoInfo.cover?.url || videoInfo.stills?.url}
               sources={playerSources}
@@ -341,8 +383,17 @@ function WatchVideo() {
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-[#aaaaaa] bg-[#000000]">
-              <Loader2 className="w-10 h-10 animate-spin text-red-600 mb-2" />
-              <p className="text-sm">Fetching sources...</p>
+              {error ? (
+                 <div className="text-center p-6">
+                    <p className="text-red-500 mb-4">{error}</p>
+                    <button onClick={() => window.location.reload()} className="px-6 py-2 bg-white text-black rounded-full font-bold">Retry</button>
+                 </div>
+              ) : (
+                <>
+                  <Loader2 className="w-10 h-10 animate-spin text-red-600 mb-2" />
+                  <p className="text-sm">Fetching sources...</p>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -374,14 +425,16 @@ function WatchVideo() {
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 lg:pb-0 min-h-[40px]">
-            {/* Season and Episode Selection Buttons for TV Series */}
+            {/* Season and Episode Selection for TV Series */}
             {videoInfo.subjectType === 2 && (
               <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="relative">
-                  <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#3f3f3f] rounded-full text-white text-sm font-medium whitespace-nowrap transition-colors border border-transparent active:border-white/20">
-                    <span>Season {selectedSeason || 1}</span>
-                    <ChevronDown size={16} className="text-[#aaaaaa]" />
-                  </button>
+                {/* Season Dropdown */}
+                <div className="relative group">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#3f3f3f] rounded-full text-white text-sm font-medium whitespace-nowrap transition-colors border border-transparent group-hover:border-white/10 pointer-events-none">
+                    <span className="text-[#aaaaaa] mr-1">Season</span>
+                    <span>{selectedSeason || 1}</span>
+                    <ChevronDown size={14} className="text-[#aaaaaa] ml-1" />
+                  </div>
                   <select
                     value={selectedSeason || 1}
                     onChange={(e) => {
@@ -391,42 +444,47 @@ function WatchVideo() {
                       if (firstEpInSeason) setSelectedEpisode(firstEpInSeason.episode);
                       else setSelectedEpisode(1);
                     }}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-black"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full [&_option]:bg-[#1f1f1f] [&_option]:text-white"
+                    title="Select Season"
                   >
                     {seasons.length > 0 ? (
                       seasons.map(s => (
-                        <option key={s} value={s} className="text-black">Season {s}</option>
+                        <option key={s} value={s}>Season {s}</option>
                       ))
                     ) : (
-                      <option value={1} className="text-black">Season 1</option>
+                      <option value={1}>Season 1</option>
                     )}
                   </select>
                 </div>
 
-                <div className="relative">
-                  <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#3f3f3f] rounded-full text-white text-sm font-medium whitespace-nowrap transition-colors border border-transparent active:border-white/20">
-                    <ListIcon size={18} />
-                    <span>Episode {selectedEpisode || 1}</span>
-                    <ChevronDown size={16} className="text-[#aaaaaa]" />
-                  </button>
+                {/* Episode Dropdown */}
+                <div className="relative group">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#3f3f3f] rounded-full text-white text-sm font-medium whitespace-nowrap transition-colors border border-transparent group-hover:border-white/10 pointer-events-none">
+                    <ListIcon size={16} className="text-[#aaaaaa] mr-1" />
+                    <span className="text-[#aaaaaa] mr-1">Episode</span>
+                    <span>{selectedEpisode || 1}</span>
+                    <ChevronDown size={14} className="text-[#aaaaaa] ml-1" />
+                  </div>
                   <select
                     value={selectedEpisode || 1}
                     onChange={(e) => setSelectedEpisode(Number(e.target.value))}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full text-black"
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full [&_option]:bg-[#1f1f1f] [&_option]:text-white"
+                    title="Select Episode"
                   >
                     {episodesInSelectedSeason.length > 0 ? (
                       episodesInSelectedSeason.map(ep => {
-                        const displayTitle = ep.title && !ep.title.includes(`Episode ${ep.episode}`) 
-                          ? `: ${ep.title}` 
+                        const epLabel = `Episode ${ep.episode}`;
+                        const epTitle = ep.title && !ep.title.includes(`Episode ${ep.episode}`) 
+                          ? ` - ${ep.title}` 
                           : '';
                         return (
-                          <option key={ep.episodeId} value={ep.episode} className="text-black">
-                            Episode {ep.episode}{displayTitle}
+                          <option key={ep.episodeId} value={ep.episode}>
+                            {epLabel}{epTitle}
                           </option>
                         );
                       })
                     ) : (
-                      <option value={1} className="text-black">Episode 1</option>
+                      <option value={1}>Episode 1</option>
                     )}
                   </select>
                 </div>
@@ -460,7 +518,7 @@ function WatchVideo() {
         {/* Description Box */}
         <div className="bg-[#272727] rounded-xl p-4 text-sm text-white">
           <div className="font-semibold mb-2">
-            {videoInfo.year || '2024'} • {videoInfo.duration || '2:30:00'} • {videoInfo.quality || 'HD'}
+            {videoInfo.year || videoInfo.releaseDate?.split('-')[0] || '2024'} • {videoInfo.duration && videoInfo.duration > 0 ? formatTime(videoInfo.duration) : videoInfo.subjectType === 2 ? 'TV Series' : 'Movie'} • {videoInfo.quality || 'HD'}
           </div>
           <p className="whitespace-pre-wrap leading-relaxed text-[#f1f1f1]">
             {videoInfo.synopsis || videoInfo.desc || `Watch ${videoInfo.title} in HD quality.`}

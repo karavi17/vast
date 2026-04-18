@@ -1,6 +1,6 @@
-import { VideoItem } from '@/types';
+import type { VideoItem } from '@/types';
 import { MoreVertical, CheckCircle } from 'lucide-react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 
 interface VideoCardProps {
   video: VideoItem;
@@ -19,7 +19,7 @@ export const VideoCard = ({ video }: VideoCardProps) => {
   const quality = video.quality || 'HD'; // Fallback if not available
 
   return (
-    <Link href={`/watch?v=${video.subjectId}&type=${video.subjectType}`} className="flex flex-col gap-2 sm:gap-3 group cursor-pointer">
+    <Link to={`/watch?v=${video.subjectId}&type=${video.subjectType}`} className="flex flex-col gap-2 sm:gap-3 group cursor-pointer">
       <div className="relative aspect-video rounded-xl overflow-hidden bg-[#1a1a1a] flex-shrink-0">
         <img
           src={thumbnail}

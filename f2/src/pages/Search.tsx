@@ -1,15 +1,13 @@
-'use client';
-
-import { useEffect, useState, Suspense, useRef, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { searchVideos } from '@/lib/api';
-import { VideoItem } from '@/types';
+import type { VideoItem } from '@/types';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { Loader2 } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
-function SearchResults() {
-  const searchParams = useSearchParams();
+export default function SearchPage() {
+  const [searchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const { language } = useLanguage();
   
@@ -29,7 +27,7 @@ function SearchResults() {
       if (entries[0].isIntersecting && hasMore) {
         setPage(prevPage => prevPage + 1);
       }
-    });
+    }, { rootMargin: '400px' });
     
     if (node) observer.current.observe(node);
   }, [loading, loadingMore, hasMore]);
@@ -46,9 +44,10 @@ function SearchResults() {
         const response = await searchVideos(query, 1, 24, language);
         if (response.status === 'success' && response.data.items) {
           setVideos(response.data.items);
-          setHasMore(response.data.items.length >= 10);
+          setHasMore(response.data.items.length >= 20);
         }
-      } catch {
+      } catch (err) {
+        console.error(err);
         setError('Failed to fetch search results.');
       } finally {
         setLoading(false);
@@ -76,10 +75,11 @@ function SearchResults() {
               const uniqueNewItems = newItems.filter(v => !existingIds.has(v.subjectId));
               return [...prev, ...uniqueNewItems];
             });
-            setHasMore(newItems.length >= 10);
+            setHasMore(newItems.length >= 20);
           }
         }
-      } catch {
+      } catch (err) {
+        console.error(err);
       } finally {
         setLoadingMore(false);
       }
@@ -128,17 +128,5 @@ function SearchResults() {
         )}
       </div>
     </div>
-  );
-}
-
-export default function SearchPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-white">
-        <Loader2 className="w-10 h-10 animate-spin text-red-600 mb-4" />
-      </div>
-    }>
-      <SearchResults />
-    </Suspense>
   );
 }
