@@ -4,9 +4,7 @@ import type { ApiResponse, HomepageData, VideoItem, Subtitle } from '@/types';
 const RAILWAY_BACKEND_URL = 'https://backend-production-25ab.up.railway.app';
 
 const api = axios.create({
-  baseURL: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? '/api'
-    : `${RAILWAY_BACKEND_URL}/api`,
+  baseURL: `${RAILWAY_BACKEND_URL}/api`,
 });
 
 export const getHomepage = async (lang = 'RANDOM') => {
