@@ -39,7 +39,7 @@ export const Sidebar = () => {
           >
             <X size={24} />
           </button>
-          <Link href="/" className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2">
             <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain" />
             <span className="text-white font-bold text-xl tracking-tighter">VastWord</span>
           </Link>

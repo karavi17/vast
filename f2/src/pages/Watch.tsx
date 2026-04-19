@@ -162,15 +162,21 @@ export default function WatchPage() {
 
         const results = await Promise.allSettled(requests);
         
-        let infoResult, sourcesResult, relatedResult;
-        if (isInitialLoad) {
-          [infoResult, sourcesResult, relatedResult] = results;
-        } else {
-          [sourcesResult, relatedResult] = results;
-        }
+        let infoResult: PromiseSettledResult<any> | undefined;
+        let sourcesResult: PromiseSettledResult<any> | undefined;
+        let relatedResult: PromiseSettledResult<any> | undefined;
 
         if (isInitialLoad) {
-          if (infoResult.status === 'fulfilled' && infoResult.value.status === 'success' && infoResult.value.data.subject) {
+          infoResult = results[0];
+          sourcesResult = results[1];
+          relatedResult = results[2];
+        } else {
+          sourcesResult = results[0];
+          relatedResult = results[1];
+        }
+
+        if (isInitialLoad && infoResult) {
+          if (infoResult.status === 'fulfilled' && infoResult.value?.status === 'success' && infoResult.value?.data?.subject) {
             const currentSubject = infoResult.value.data.subject;
             setVideoInfo(currentSubject);
             if (currentSubject.subjectType === 2 && currentSubject.episodeList?.length > 0) {
@@ -188,7 +194,7 @@ export default function WatchPage() {
           }
         }
 
-        if (sourcesResult.status === 'fulfilled' && sourcesResult.value.status === 'success') {
+        if (sourcesResult && sourcesResult.status === 'fulfilled' && sourcesResult.value?.status === 'success') {
           const sourcesData = sourcesResult.value.data as SourcesResponseData;
           if (sourcesData.processedSources) {
             const availableSources = sourcesData.processedSources.map(s => ({
@@ -216,7 +222,7 @@ export default function WatchPage() {
           }
         }
 
-        if (relatedResult.status === 'fulfilled' && relatedResult.value.status === 'success') {
+        if (relatedResult && relatedResult.status === 'fulfilled' && relatedResult.value?.status === 'success') {
           setRelatedVideos(relatedResult.value.data.items);
         } else {
           setRelatedVideos([]);

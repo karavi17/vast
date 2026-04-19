@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Volume2, VolumeX, Maximize, Minimize, Play, Pause } from 'lucide-react';
 import type { Subtitle } from '@/types';
 
