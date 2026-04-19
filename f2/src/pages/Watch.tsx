@@ -56,7 +56,7 @@ export default function WatchPage() {
     if (!sources.length) return [];
     
     // 1. Identify all available languages
-    const availableLangs = Array.from(new Set(sources.map(s => s.language.toUpperCase())));
+    const availableLangs = Array.from(new Set(sources.map(s => (s.language || '').toUpperCase())));
     
     // 2. Determine which language group to show
     let targetLang = '';
@@ -66,12 +66,12 @@ export default function WatchPage() {
       targetLang = 'ENGLISH';
     } else {
       // Default to the first available language if preferred one isn't there
-      targetLang = availableLangs[0];
+      targetLang = availableLangs[0] || '';
     }
     
     // 3. Filter sources by that language and remove language from label
     return sources
-      .filter(s => s.language.toUpperCase() === targetLang)
+      .filter(s => (s.language || '').toUpperCase() === targetLang)
       .map(s => ({
         ...s,
         label: s.quality // Remove language from label

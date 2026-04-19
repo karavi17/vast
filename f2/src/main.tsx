@@ -9,7 +9,7 @@ import { ToastProvider } from './context/ToastContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/vast">
       <LanguageProvider>
         <UIProvider>
           <ToastProvider>
