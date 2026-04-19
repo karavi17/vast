@@ -58,7 +58,7 @@ export function YoutubePlayer(props: {
   // Handle source change without losing progress
   useEffect(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || !selected?.src) return;
 
     const restoreProgress = () => {
       if (currentTimeRef.current > 0) {
@@ -71,7 +71,7 @@ export function YoutubePlayer(props: {
 
     el.addEventListener('loadedmetadata', restoreProgress);
     return () => el.removeEventListener('loadedmetadata', restoreProgress);
-  }, [selected.src]);
+  }, [selected?.src]);
 
   useEffect(() => {
     const el = videoRef.current;

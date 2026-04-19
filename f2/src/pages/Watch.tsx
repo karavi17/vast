@@ -215,11 +215,17 @@ export default function WatchPage() {
                 preferredSource = availableSources.find((s: any) => s.language.toUpperCase().includes('ENGLISH')) || preferredSource;
               }
               setSelectedSourceId(preferredSource.id);
+            } else {
+              setError('No streaming sources available for this video.');
             }
+          } else {
+            setError('No streaming sources available for this video.');
           }
           if (sourcesData.processedSubtitles) {
             setSubtitles(sourcesData.processedSubtitles);
           }
+        } else {
+          setError('Failed to load streaming sources.');
         }
 
         if (relatedResult && relatedResult.status === 'fulfilled' && relatedResult.value?.status === 'success') {
